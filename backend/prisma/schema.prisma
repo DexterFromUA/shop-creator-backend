@@ -1,0 +1,257 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Client {
+  id                     String   @id @default(uuid())
+  name                   String?
+  email                  String?  @unique
+  password               String?
+  phone                  String?  @unique
+  emailVerified          Boolean  @default(false)
+  phoneVerified          Boolean  @default(false)
+  emailVerificationToken String?  @unique
+  phoneVerificationToken String?  @unique
+  passwordResetToken     String?  @unique
+  role                   Role     @default(USER)
+  stores                 Store[]  @relation("StoreOwner")
+  managingStores         Store[]  @relation("StoreManager")
+  deliveringStores       Store[]  @relation("StoreCourier")
+  usedInvites            Invite[]
+  subscriptionActive     Boolean  @default(true)
+  subscriptionType       SubscriptionType @default(BASIC)
+  subscriptionStartDate  DateTime?
+  subscriptionEndDate    DateTime?
+  paymentCardNumber      String?
+  paymentCardHolder      String?
+  paymentCardExpiryMonth Int?
+  paymentCardExpiryYear  Int?
+  paymentCardCvv         String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model Store {
+  id        String   @id @default(uuid())
+  name      String
+  description String?
+  contactEmail String?
+  contactPhone String?
+  contactAddress String?
+  contactCity String?
+  ownerId   String
+  owner     Client   @relation("StoreOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  managers  Client[] @relation("StoreManager")
+  couriers  Client[] @relation("StoreCourier")
+  products  Product[]
+  appId     String?  @unique
+  app       App?     @relation(fields: [appId], references: [id], onDelete: SetNull)
+  users     User[]   @relation("StoreUsers")
+  invites   Invite[]
+  isActive  Boolean  @default(true)
+  
+  // Payout Bank Account Information
+  bankAccountNumber    String?
+  bankAccountHolder    String?
+  bankName            String?
+  bankIban            String?
+  bankSwiftCode       String?
+  
+  transactions Transaction[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String?
+  phone     String   @unique
+  orders    Order[]  @relation("UserOrders")
+  storesId  String[]
+  city      String?
+  postNumber Int?
+  stores    Store[]  @relation("StoreUsers")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([phone, name])
+}
+
+model Product {
+  id            String        @id @default(uuid())
+  name          String
+  description   String?
+  price         Float
+  category      String?
+  amount        Int           @default(0)
+  sizeInventory ProductSize[]
+  isPreOrder    Boolean       @default(false)
+  isDiscount    Boolean       @default(false)
+  discountPercent Int         @default(0)
+  imgUrls       String[]     @default([])
+  storeId       String
+  store         Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  orderCount    Int           @default(0)
+  orders        Order[]       @relation("ProductOrders")
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([storeId, name])
+}
+
+model ProductSize {
+  id        String   @id @default(uuid())
+  size      Size
+  quantity  Int      @default(0)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, size])
+  @@index([productId])
+}
+
+model Order {
+  id          String        @id @default(uuid())
+  userId      String
+  user        User          @relation("UserOrders", fields: [userId], references: [id], onDelete: Cascade)
+  products    Product[]     @relation("ProductOrders")
+  totalPrice  Float
+  status      OrderStatus   @default(PENDING)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([userId, status])
+}
+
+model App {
+  id               String   @id @default(uuid())
+  name             String
+  description      String?
+  slug             String   @unique
+  version          String   @default("1.0.0")
+  iconUrl          String?
+  splashScreenUrl  String?
+  primaryColor     String   @default("#111827")
+  secondaryColor   String   @default("#6b7280")
+  targetPlatforms  String[] @default(["ANDROID", "IOS"])
+  defaultLanguage  String   @default("en")
+  currency         String   @default("USD")
+  keywords         String[] @default([])
+  screenshots      String[] @default([])
+  storeId          String?
+  store            Store?
+  appUrl           String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([name, slug])
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum Size {
+  XS
+  S
+  M
+  L
+  XL
+  XXL
+}
+
+enum OrderStatus {
+  PENDING
+  IN_PROGRESS
+  READY_FOR_PICKUP
+  DELIVERED
+  CANCELLED_BY_USER
+  CANCELLED_BY_STORE
+}
+
+enum SubscriptionType {
+  BASIC
+  ADVANCED
+  PRO
+  UNLIMITED
+}
+
+enum TeamRole {
+  MANAGER
+  COURIER
+}
+
+model Invite {
+  id        String    @id @default(uuid())
+  token     String    @unique @default(uuid())
+  email     String?
+  role      TeamRole
+  storeId   String
+  store     Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  isUsed    Boolean   @default(false)
+  usedAt    DateTime?
+  usedById  String?
+  usedBy    Client?   @relation(fields: [usedById], references: [id], onDelete: SetNull)
+  revoked   Boolean   @default(false)
+  revokedAt DateTime?
+
+  @@index([token])
+  @@index([storeId])
+}
+
+model Transaction {
+  id                String           @id @default(uuid())
+  storeId           String
+  store             Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  amount            Float
+  type              TransactionType
+  status            TransactionStatus @default(PENDING)
+  description       String?
+  externalId        String?          // Payment processor transaction ID
+  paymentMethod     String?          // e.g., "stripe", "paypal", "bank_transfer"
+  currency          String           @default("USD")
+  processingFee     Float?           // Fee charged by payment processor
+  netAmount         Float?           // Amount after fees
+  referenceOrderId  String?          // If related to a specific order
+  metadata          Json?            // Additional data as JSON
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  processedAt       DateTime?        // When the transaction was actually processed
+
+  @@index([storeId, status])
+  @@index([type, status])
+  @@index([createdAt])
+}
+
+enum TransactionType {
+  SALE              // Money coming in from sales
+  PAYOUT            // Money going out to store owner
+  REFUND            // Money going back to customer
+  FEE               // Platform fees
+  CHARGEBACK        // Disputed transactions
+  ADJUSTMENT        // Manual adjustments
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+  DISPUTED
+}

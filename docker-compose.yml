@@ -1,0 +1,33 @@
+version: "3.9"
+
+services:
+  system_db:
+    image: postgres:15
+    container_name: system_db
+    environment:
+      POSTGRES_DB: system_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - system_pgdata:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    container_name: backend
+    ports:
+      - "3001:3000"
+    depends_on:
+      - system_db
+    env_file:
+      - backend/.env
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@system_db:5432/system_dev?schema=public
+      - JWT_SECRET=your-super-secret-jwt-key-for-development-only
+    volumes:
+      - ./backend:/app
+    command: yarn dev
+
+volumes:
+  system_pgdata:
