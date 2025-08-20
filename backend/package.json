@@ -4,11 +4,11 @@
   "main": "src/index.js",
   "scripts": {
     "dev": "nodemon src/index.js",
-    "db:reset": "npx prisma db push --schema=prisma/system.prisma --force-reset --accept-data-loss",
-    "db:push": "npx prisma db push --schema=prisma/system.prisma",
-    "db:generate": "npx prisma generate --schema=prisma/system.prisma",
-    "db:migrate": "npx prisma migrate dev --schema=prisma/system.prisma",
-    "db:studio": "npx prisma studio --schema=prisma/system.prisma"
+    "db:reset": "npx prisma db push --schema=prisma/schema.prisma --force-reset --accept-data-loss",
+    "db:push": "npx prisma db push --schema=prisma/schema.prisma",
+    "db:generate": "npx prisma generate --schema=prisma/schema.prisma",
+    "db:migrate": "npx prisma migrate dev",
+    "db:studio": "npx prisma studio"
   },
   "dependencies": {
     "@prisma/client": "^6.9.0",
