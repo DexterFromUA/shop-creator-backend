@@ -3,11 +3,9 @@ version: "3.9"
 services:
   system_db:
     image: postgres:15
-    container_name: system_db
-    environment:
-      POSTGRES_DB: system_dev
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+    container_name: database
+    env_file:
+      - backend/.env
     ports:
       - "5432:5432"
     volumes:
@@ -18,16 +16,14 @@ services:
     container_name: backend
     ports:
       - "3001:3000"
+      - "5555:5555"
     depends_on:
       - system_db
     env_file:
       - backend/.env
-    environment:
-      - DATABASE_URL=postgresql://postgres:password@system_db:5432/system_dev?schema=public
-      - JWT_SECRET=your-super-secret-jwt-key-for-development-only
     volumes:
       - ./backend:/app
-    command: yarn dev
+      - /app/node_modules
 
   storage:
     build: ./storage
@@ -36,9 +32,8 @@ services:
     ports:
       - "9000:9000"   # S3 API
       - "9001:9001"   # Web UI
-    environment:
-      - MINIO_ROOT_USER=admin
-      - MINIO_ROOT_PASSWORD=admin123
+    env_file:
+      - storage/.env
     volumes:
       - bucket:/data
 

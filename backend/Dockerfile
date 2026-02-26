@@ -7,4 +7,6 @@ RUN yarn install
 
 COPY . .
 
-CMD ["yarn", "dev"]
+RUN yarn run db:generate
+
+CMD ["sh", "-c", "yarn db:migrate && yarn dev"]
