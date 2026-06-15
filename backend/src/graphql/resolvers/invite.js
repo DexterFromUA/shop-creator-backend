@@ -2,45 +2,29 @@ const { PrismaClient } = require("@prisma/client");
 
 const prisma = new PrismaClient();
 
-const checkStoreAccess = (store, user, includeRoles = ['owner', 'manager', 'courier']) => {
-  if (!store || !user) return false;
-  
-  const checks = [];
-  
-  if (includeRoles.includes('owner')) {
-    checks.push(store.ownerId === user.id);
-  }
-  
-  if (includeRoles.includes('manager') && store.managers) {
-    checks.push(store.managers.some(manager => manager.id === user.id));
-  }
-  
-  if (includeRoles.includes('courier') && store.couriers) {
-    checks.push(store.couriers.some(courier => courier.id === user.id));
-  }
-  
-  return checks.some(check => check === true);
-};
-
-const checkStoreIdAccess = async (storeId, user, includeRoles = ['owner', 'manager', 'courier']) => {
-  const store = await prisma.store.findUnique({
-    where: { id: storeId },
-    include: {
-      owner: true,
-      managers: includeRoles.includes('manager'),
-      couriers: includeRoles.includes('courier'),
-    }
+const checkPermission = async ({ storeId, clientId, permission }) => {
+  const membership = await prisma.storeClients.findUnique({
+    where: {
+      storeId_clientId: {
+        storeId,
+        clientId,
+      },
+    },
+    select: {
+      permissions: true,
+    },
   });
 
-  if (!store) {
-    throw new Error('Store not found');
+  if (
+    membership &&
+    (membership.permissions.includes("OWNER") ||
+      membership.permissions.includes(permission) ||
+      permission === "any")
+  ) {
+    return true;
   }
 
-  if (!checkStoreAccess(store, user, includeRoles)) {
-    throw new Error('Access denied to this store');
-  }
-
-  return store;
+  return false;
 };
 
 const inviteResolvers = {
@@ -51,11 +35,7 @@ const inviteResolvers = {
       const invite = await prisma.invite.findUnique({
         where: { token },
         include: {
-          store: {
-            include: {
-              owner: true,
-            },
-          },
+          store: true,
           usedBy: true,
         },
       });
@@ -83,11 +63,17 @@ const inviteResolvers = {
 
       console.log("Fetching invites for store:", storeId, "by user:", user.id);
 
-      // Only store owners and managers can view invites
-      await checkStoreIdAccess(storeId, user, ['owner', 'manager']);
+      const permission = await checkPermission({
+        storeId: storeId,
+        clientId: user.id,
+        permission: "TEAM",
+      });
+      if (!permission) {
+        throw new Error("Store not found");
+      }
 
       const invites = await prisma.invite.findMany({
-        where: { 
+        where: {
           storeId,
           // isUsed: false, // Only show unused invites
           // expiresAt: {
@@ -103,6 +89,75 @@ const inviteResolvers = {
 
       return invites;
     },
+    getStoreUsers: async (_, { storeId }, { user }) => {
+      console.log(
+        "Fetching invited users for store:",
+        storeId,
+        "by user:",
+        user.id,
+      );
+
+      if (!user) {
+        throw new Error("Not authenticated");
+      }
+
+      const permission = await checkPermission({
+        storeId: storeId,
+        clientId: user.id,
+        permission: "TEAM",
+      });
+      if (!permission) {
+        throw new Error("Store not found");
+      }
+
+      const store = await prisma.store.findUnique({
+        where: {
+          id: storeId,
+        },
+        select: {
+          clients: {
+            where: {
+              NOT: [
+                {
+                  permissions: {
+                    has: "OWNER",
+                  },
+                },
+              ],
+              client: {
+                id: {
+                  not: user.id,
+                },
+              },
+            },
+            select: {
+              client: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  usedInvites: {
+                    where: {
+                      storeId: storeId,
+                    },
+                    select: {
+                      id: true,
+                      permissions: true,
+                    },
+                    orderBy: {
+                      usedAt: "desc",
+                    },
+                    take: 1,
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      return store.clients.map((client) => client.client);
+    },
   },
   Mutation: {
     createInvite: async (_, { input }, { user }) => {
@@ -110,12 +165,22 @@ const inviteResolvers = {
         throw new Error("Not authenticated");
       }
 
-      console.log("Creating invite for store:", input.storeId, "by user:", user.id);
+      console.log(
+        "Creating invite for store:",
+        input.storeId,
+        "by user:",
+        user.id,
+      );
 
-      // Only store owners and managers can create invites
-      await checkStoreIdAccess(input.storeId, user, ['owner', 'manager']);
+      const permission = await checkPermission({
+        storeId: input.storeId,
+        clientId: user.id,
+        permission: "TEAM",
+      });
+      if (!permission) {
+        throw new Error("Store not found");
+      }
 
-      // Check if there's already an active invite for this email and store (only if email is provided)
       if (input.email) {
         const existingInvite = await prisma.invite.findFirst({
           where: {
@@ -141,9 +206,10 @@ const inviteResolvers = {
           },
         });
 
-        const isAlreadyMember = store.ownerId === user.id || 
-          store.managers.some(m => m.email === input.email) ||
-          store.couriers.some(c => c.email === input.email);
+        const isAlreadyMember =
+          store.ownerId === user.id ||
+          store.managers.some((m) => m.email === input.email) ||
+          store.couriers.some((c) => c.email === input.email);
 
         if (isAlreadyMember) {
           throw new Error("User is already a member of this store");
@@ -154,19 +220,20 @@ const inviteResolvers = {
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 7);
 
+      const permissionsList = Object.entries(input)
+        .filter(([key, value]) => typeof value === "boolean" && value)
+        .map((el) => el[0].toUpperCase());
+
       const invite = await prisma.invite.create({
         data: {
           email: input.email,
-          role: input.role,
+          description: input?.description ?? "",
+          permissions: [...permissionsList],
           storeId: input.storeId,
           expiresAt,
         },
         include: {
-          store: {
-            include: {
-              owner: true,
-            },
-          },
+          store: true,
           usedBy: true,
         },
       });
@@ -174,95 +241,69 @@ const inviteResolvers = {
       console.log("Invite created successfully:", invite.id);
       return invite;
     },
+
     acceptInvite: async (_, { token }, { user }) => {
+      console.log("Accepting invite with token:", token, "by user:", user.id);
       if (!user) {
         throw new Error("Not authenticated");
       }
 
-      console.log("Accepting invite with token:", token, "by user:", user.id);
-
       const invite = await prisma.invite.findUnique({
         where: { token },
-        include: {
-          store: {
-            include: {
-              managers: true,
-              couriers: true,
-            },
-          },
-        },
       });
-
       if (!invite) {
         throw new Error("Invite not found");
       }
-
       if (new Date() > invite.expiresAt) {
         throw new Error("Invite has expired");
       }
-
       if (invite.isUsed) {
         throw new Error("Invite has already been used");
       }
-
       if (invite.revoked) {
         throw new Error("Invite has been revoked");
       }
 
-      // Check if user is already part of the team
-      const isAlreadyMember = invite.store.ownerId === user.id || 
-        invite.store.managers.some(m => m.id === user.id) ||
-        invite.store.couriers.some(c => c.id === user.id);
-
+      const isAlreadyMember = await checkPermission({
+        storeId: invite.storeId,
+        clientId: user.id,
+        permission: "any",
+      });
       if (isAlreadyMember) {
         throw new Error("You are already a member of this store");
       }
 
-      const updatedUser = await prisma.$transaction(async (prismaTransaction) => {
-        await prismaTransaction.invite.update({
+      const [createResult, updateResult] = await prisma.$transaction([
+        prisma.storeClients.create({
+          data: {
+            storeId: invite.storeId,
+            clientId: user.id,
+            permissions: invite.permissions,
+          },
+          include: {
+            store: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        }),
+        prisma.invite.update({
           where: { id: invite.id },
           data: {
             isUsed: true,
             usedAt: new Date(),
             usedById: user.id,
           },
-        });
-
-        if (invite.role === 'MANAGER') {
-          await prismaTransaction.store.update({
-            where: { id: invite.storeId },
-            data: {
-              managers: {
-                connect: { id: user.id },
-              },
-            },
-          });
-        } else if (invite.role === 'COURIER') {
-          await prismaTransaction.store.update({
-            where: { id: invite.storeId },
-            data: {
-              couriers: {
-                connect: { id: user.id },
-              },
-            },
-          });
-        }
-
-        const updatedUser = await prismaTransaction.client.findUnique({
-          where: { id: user.id },
-          include: {
-            stores: true,
-            managingStores: true,
-            deliveringStores: true,
+          select: {
+            expiresAt: true,
           },
-        });
+        }),
+      ]);
 
-        return updatedUser;
-      });
-
-      console.log("Invite accepted successfully for user:", user.id);
-      return updatedUser;
+      return { ...createResult, ...updateResult };
     },
+
     revokeInvite: async (_, { id }, { user }) => {
       if (!user) {
         throw new Error("Not authenticated");
@@ -272,22 +313,19 @@ const inviteResolvers = {
 
       const invite = await prisma.invite.findUnique({
         where: { id },
-        include: {
-          store: {
-            include: {
-              owner: true,
-              managers: true,
-            },
-          },
-        },
       });
 
       if (!invite) {
         throw new Error("Invite not found");
       }
 
-      if (!checkStoreAccess(invite.store, user, ['owner', 'manager'])) {
-        throw new Error("Access denied to revoke this invite");
+      const permission = await checkPermission({
+        storeId: invite.storeId,
+        clientId: user.id,
+        permission: "TEAM",
+      });
+      if (!permission) {
+        throw new Error("Permission denied");
       }
 
       if (invite.isUsed) {
@@ -305,11 +343,7 @@ const inviteResolvers = {
           revokedAt: new Date(),
         },
         include: {
-          store: {
-            include: {
-              owner: true,
-            },
-          },
+          store: true,
           usedBy: true,
         },
       });
@@ -317,62 +351,57 @@ const inviteResolvers = {
       console.log("Invite revoked successfully:", id);
       return revokedInvite;
     },
+
     removeTeamMember: async (_, { storeId, userId }, { user }) => {
+      console.log(
+        "Removing team member:",
+        userId,
+        "from store:",
+        storeId,
+        "by user:",
+        user.id,
+      );
+
       if (!user) {
         throw new Error("Not authenticated");
       }
 
-      console.log("Removing team member:", userId, "from store:", storeId, "by user:", user.id);
+      const permission = await checkPermission({
+        storeId: storeId,
+        clientId: user.id,
+        permission: "TEAM",
+      });
+      if (!permission) {
+        throw new Error("Permission denied");
+      }
 
-      // Only store owners and managers can remove team members
-      const store = await checkStoreIdAccess(storeId, user, ['owner', 'manager']);
-
-      // Cannot remove the store owner
-      if (store.ownerId === userId) {
+      const membership = await prisma.storeClients.findUnique({
+        where: {
+          storeId_clientId: {
+            storeId,
+            clientId: userId,
+          },
+        },
+        select: {
+          permissions: true,
+        },
+      });
+      if (!membership) {
+        throw new Error("User doesn't exist");
+      }
+      if (membership.permissions.includes("OWNER")) {
         throw new Error("Cannot remove the store owner");
       }
 
-      // Get the user to be removed
-      const userToRemove = await prisma.client.findUnique({
-        where: { id: userId },
+      const userToRemove = await prisma.storeClients.delete({
+        where: {
+          storeId_clientId: {
+            storeId,
+            clientId: userId,
+          },
+        },
       });
 
-      if (!userToRemove) {
-        throw new Error("User not found");
-      }
-
-      // Check if user is actually a member of the store
-      const isManager = store.managers && store.managers.some(m => m.id === userId);
-      const isCourier = store.couriers && store.couriers.some(c => c.id === userId);
-
-      if (!isManager && !isCourier) {
-        throw new Error("User is not a member of this store");
-      }
-
-      // Remove user from the store team
-      if (isManager) {
-        await prisma.store.update({
-          where: { id: storeId },
-          data: {
-            managers: {
-              disconnect: { id: userId },
-            },
-          },
-        });
-      }
-
-      if (isCourier) {
-        await prisma.store.update({
-          where: { id: storeId },
-          data: {
-            couriers: {
-              disconnect: { id: userId },
-            },
-          },
-        });
-      }
-
-      console.log("Team member removed successfully:", userId);
       return userToRemove;
     },
   },
@@ -380,20 +409,15 @@ const inviteResolvers = {
   Invite: {
     store: async (parent) => {
       if (parent.store) return parent.store;
-      
+
       return await prisma.store.findUnique({
         where: { id: parent.storeId },
-        include: {
-          owner: true,
-          managers: true,
-          couriers: true,
-        },
       });
     },
     usedBy: async (parent) => {
       if (!parent.usedById) return null;
       if (parent.usedBy) return parent.usedBy;
-      
+
       return await prisma.client.findUnique({
         where: { id: parent.usedById },
       });
@@ -401,4 +425,4 @@ const inviteResolvers = {
   },
 };
 
-module.exports = inviteResolvers; 
+module.exports = inviteResolvers;

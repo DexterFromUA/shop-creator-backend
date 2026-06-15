@@ -60,10 +60,18 @@ const payoutSchema = gql`
     metadata: String
   }
 
-
+  type GetStoreBankAccountResponse {
+    id: String!
+    bankAccountNumber: String
+    bankAccountHolder: String
+    bankName: String
+    bankIban: String
+    bankSwiftCode: String
+    updatedAt:String
+  }
 
   extend type Query {
-    getStoreBankAccount(storeId: String!): Store
+    getStoreBankAccount(storeId: String!): GetStoreBankAccountResponse!
     getStoreTransactions(storeId: String!): [Transaction!]!
     getTransaction(id: String!): Transaction
   }

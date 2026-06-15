@@ -22,6 +22,28 @@ const authSchema = gql`
     XXL
   }
 
+  enum Permissions {
+    OWNER
+    ORDERS
+    PRODUCTS
+    PAYOUTS
+    NOTIFICATIONS
+    USERS
+    TEAM
+    STORE
+    APP
+  }
+
+  type StoreClients {
+    storeId: String!
+    clientId: String!
+    store: Store
+    client: Client
+    permissions: [Permissions]!
+    createdAt: String
+    updatedAt: String
+  }
+
   type Store {
     id: ID!
     name: String!
@@ -33,9 +55,7 @@ const authSchema = gql`
     isActive: Boolean!
     appId: String
     app: App
-    owner: Client!
-    managers: [Client!]!
-    couriers: [Client!]!
+    clients: [StoreClients!]!
     products: [Product!]!
     bankAccountNumber: String
     bankAccountHolder: String
@@ -106,9 +126,7 @@ const authSchema = gql`
     emailVerified: Boolean!
     phoneVerified: Boolean!
     role: Role!
-    stores: [Store!]!
-    managingStores: [Store!]!
-    deliveringStores: [Store!]!
+    stores: [StoreClients!]!
     subscriptionActive: Boolean!
     subscriptionType: SubscriptionType!
     subscriptionStartDate: String
@@ -206,8 +224,8 @@ const authSchema = gql`
   type Query {
     hello: String
     me: Client
-    myStores: [Store!]!
-    store(id: ID!): Store
+    myStores: [StoreClients]!
+    store(id: ID!): StoreClients!
     storeProducts(storeId: ID!): [Product!]!
     product(id: ID!): Product
   }

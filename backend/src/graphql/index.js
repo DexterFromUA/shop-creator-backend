@@ -1,4 +1,5 @@
 const { makeExecutableSchema } = require('apollo-server-express');
+
 const authSchema = require('./schemas/auth');
 const inviteSchema = require('./schemas/invite');
 const payoutSchema = require('./schemas/payout');

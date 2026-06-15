@@ -8,6 +8,7 @@
     "db:push": "npx prisma@6.9.0 db push --schema=prisma/schema.prisma",
     "db:generate": "npx prisma@6.9.0 generate --schema=prisma/schema.prisma",
     "db:migrate": "npx prisma@6.9.0 migrate dev",
+    "db:migrate:reset": "npx prisma@6.9.0 migrate reset",
     "db:studio": "npx prisma@6.9.0 studio"
   },
   "dependencies": {

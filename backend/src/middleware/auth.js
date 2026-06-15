@@ -23,8 +23,6 @@ const authMiddleware = async (req, res, next) => {
       where: { id: decoded.clientId },
       include: {
         stores: true,
-        managingStores: true,
-        deliveringStores: true
       }
     });
 
@@ -56,8 +54,6 @@ const getUser = async (req) => {
       where: { id: decoded.clientId },
       include: {
         stores: true,
-        managingStores: true,
-        deliveringStores: true
       }
     });
 
