@@ -126,7 +126,7 @@ const authSchema = gql`
     emailVerified: Boolean!
     phoneVerified: Boolean!
     role: Role!
-    stores: [StoreClients!]!
+    stores: [StoreClients]!
     subscriptionActive: Boolean!
     subscriptionType: SubscriptionType!
     subscriptionStartDate: String
