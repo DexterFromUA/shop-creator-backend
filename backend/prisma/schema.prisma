@@ -8,21 +8,80 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  ADMIN
+  USER
+}
+
+enum Size {
+  XS
+  S
+  M
+  L
+  XL
+  XXL
+}
+
+enum OrderStatus {
+  PENDING
+  IN_PROGRESS
+  READY_FOR_PICKUP
+  DELIVERED
+  CANCELLED_BY_USER
+  CANCELLED_BY_STORE
+}
+
+enum SubscriptionType {
+  BASIC
+  ADVANCED
+  PRO
+  UNLIMITED
+}
+
+enum Permissions {
+  OWNER
+  ORDERS
+  PRODUCTS
+  PAYOUTS
+  NOTIFICATIONS
+  USERS
+  TEAM
+  STORE
+  APP
+}
+
+enum TransactionType {
+  SALE
+  PAYOUT
+  REFUND
+  FEE
+  CHARGEBACK
+  ADJUSTMENT
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+  DISPUTED
+}
 model Client {
-  id                     String   @id @default(uuid())
+  id                     String           @id @default(uuid())
   name                   String?
-  email                  String?  @unique
+  email                  String?          @unique
   password               String?
-  phone                  String?  @unique
-  emailVerified          Boolean  @default(false)
-  phoneVerified          Boolean  @default(false)
-  emailVerificationToken String?  @unique
-  phoneVerificationToken String?  @unique
-  passwordResetToken     String?  @unique
-  role                   Role     @default(USER)
+  phone                  String?          @unique
+  emailVerified          Boolean          @default(false)
+  phoneVerified          Boolean          @default(false)
+  emailVerificationToken String?          @unique
+  phoneVerificationToken String?          @unique
+  passwordResetToken     String?          @unique
+  role                   Role             @default(USER)
   stores                 StoreClients[]
   usedInvites            Invite[]
-  subscriptionActive     Boolean  @default(true)
+  subscriptionActive     Boolean          @default(true)
   subscriptionType       SubscriptionType @default(BASIC)
   subscriptionStartDate  DateTime?
   subscriptionEndDate    DateTime?
@@ -31,85 +90,81 @@ model Client {
   paymentCardExpiryMonth Int?
   paymentCardExpiryYear  Int?
   paymentCardCvv         String?
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
 }
 
 model Store {
-  id        String   @id @default(uuid())
-  name      String
-  description String?
-  contactEmail String?
-  contactPhone String?
-  contactAddress String?
-  contactCity String?
-  clients   StoreClients[]
-  products  Product[]
-  appId     String?  @unique
-  app       App?     @relation(fields: [appId], references: [id], onDelete: SetNull)
-  users     User[]   @relation("StoreUsers")
-  invites   Invite[]
-  isActive  Boolean  @default(true)
-  
-  // Payout Bank Account Information
-  bankAccountNumber    String?
-  bankAccountHolder    String?
+  id                  String          @id @default(uuid())
+  name                String
+  description         String?
+  contactEmail        String?
+  contactPhone        String?
+  contactAddress      String?
+  contactCity         String?
+  clients             StoreClients[]
+  products            Product[]
+  appId               String?         @unique
+  app                 App?            @relation(fields: [appId], references: [id], onDelete: SetNull)
+  users               User[]          @relation("StoreUsers")
+  invites             Invite[]
+  isActive            Boolean         @default(true)
+  bankAccountNumber   String?
+  bankAccountHolder   String?
   bankName            String?
   bankIban            String?
   bankSwiftCode       String?
-  
-  transactions Transaction[]
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  transactions        Transaction[]
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 }
 
 model StoreClients {
   storeId     String
   clientId    String
-  store       Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  client      Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  store       Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  client      Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
   permissions Permissions[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   @@id([storeId, clientId])
 }
 
 model User {
-  id        String   @id @default(uuid())
-  name      String?
-  phone     String   @unique
-  orders    Order[]  @relation("UserOrders")
-  storesId  String[]
-  city      String?
-  postNumber Int?
-  stores    Store[]  @relation("StoreUsers")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String      @id @default(uuid())
+  name        String?
+  phone       String      @unique
+  orders      Order[]     @relation("UserOrders")
+  storesId    String[]
+  city        String?
+  postNumber  Int?
+  stores      Store[]     @relation("StoreUsers")
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 
   @@index([phone, name])
 }
 
 model Product {
-  id            String        @id @default(uuid())
-  name          String
-  description   String?
-  price         Float
-  category      String?
-  amount        Int           @default(0)
-  sizeInventory ProductSize[]
-  isPreOrder    Boolean       @default(false)
-  isDiscount    Boolean       @default(false)
-  discountPercent Int         @default(0)
-  imgUrls       String[]     @default([])
-  storeId       String
-  store         Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  orderCount    Int           @default(0)
-  orders        Order[]       @relation("ProductOrders")
-  isActive      Boolean       @default(true)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id              String        @id @default(uuid())
+  name            String
+  description     String?
+  price           Float
+  category        String?
+  amount          Int           @default(0)
+  sizeInventory   ProductSize[]
+  isPreOrder      Boolean       @default(false)
+  isDiscount      Boolean       @default(false)
+  discountPercent Int           @default(0)
+  imgUrls         String[]      @default([])
+  storeId         String
+  store           Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  orderCount      Int           @default(0)
+  orders          Order[]       @relation("ProductOrders")
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   @@index([storeId, name])
 }
@@ -164,63 +219,21 @@ model App {
   @@index([name, slug])
 }
 
-enum Role {
-  ADMIN
-  USER
-}
-
-enum Size {
-  XS
-  S
-  M
-  L
-  XL
-  XXL
-}
-
-enum OrderStatus {
-  PENDING
-  IN_PROGRESS
-  READY_FOR_PICKUP
-  DELIVERED
-  CANCELLED_BY_USER
-  CANCELLED_BY_STORE
-}
-
-enum SubscriptionType {
-  BASIC
-  ADVANCED
-  PRO
-  UNLIMITED
-}
-
-enum Permissions {
-  OWNER
-  ORDERS
-  PRODUCTS
-  PAYOUTS
-  NOTIFICATIONS
-  USERS
-  TEAM
-  STORE
-  APP
-}
-
 model Invite {
-  id               String    @id @default(uuid())
-  token            String    @unique @default(uuid())
+  id               String         @id @default(uuid())
+  token            String         @unique @default(uuid())
   email            String?
   description      String?
   permissions      Permissions[]
   storeId          String
-  store            Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  createdAt        DateTime  @default(now())
+  store            Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdAt        DateTime       @default(now())
   expiresAt        DateTime
-  isUsed           Boolean   @default(false)
+  isUsed           Boolean        @default(false)
   usedAt           DateTime?
   usedById         String?
-  usedBy           Client?   @relation(fields: [usedById], references: [id], onDelete: SetNull)
-  revoked          Boolean   @default(false)
+  usedBy           Client?        @relation(fields: [usedById], references: [id], onDelete: SetNull)
+  revoked          Boolean        @default(false)
   revokedAt        DateTime?
 
   @@index([token])
@@ -228,43 +241,25 @@ model Invite {
 }
 
 model Transaction {
-  id                String           @id @default(uuid())
+  id                String            @id @default(uuid())
   storeId           String
-  store             Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store             Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
   amount            Float
   type              TransactionType
   status            TransactionStatus @default(PENDING)
   description       String?
-  externalId        String?          // Payment processor transaction ID
-  paymentMethod     String?          // e.g., "stripe", "paypal", "bank_transfer"
-  currency          String           @default("USD")
-  processingFee     Float?           // Fee charged by payment processor
-  netAmount         Float?           // Amount after fees
-  referenceOrderId  String?          // If related to a specific order
-  metadata          Json?            // Additional data as JSON
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  processedAt       DateTime?        // When the transaction was actually processed
+  externalId        String?
+  paymentMethod     String?
+  currency          String            @default("USD")
+  processingFee     Float?
+  netAmount         Float?
+  referenceOrderId  String?
+  metadata          Json?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  processedAt       DateTime?
 
   @@index([storeId, status])
   @@index([type, status])
   @@index([createdAt])
-}
-
-enum TransactionType {
-  SALE              // Money coming in from sales
-  PAYOUT            // Money going out to store owner
-  REFUND            // Money going back to customer
-  FEE               // Platform fees
-  CHARGEBACK        // Disputed transactions
-  ADJUSTMENT        // Manual adjustments
-}
-
-enum TransactionStatus {
-  PENDING
-  PROCESSING
-  COMPLETED
-  FAILED
-  CANCELLED
-  DISPUTED
 }
