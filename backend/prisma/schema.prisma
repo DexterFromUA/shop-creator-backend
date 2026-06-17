@@ -67,6 +67,7 @@ enum TransactionStatus {
   CANCELLED
   DISPUTED
 }
+
 model Client {
   id                     String           @id @default(uuid())
   name                   String?

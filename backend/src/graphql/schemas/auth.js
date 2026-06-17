@@ -221,6 +221,11 @@ const authSchema = gql`
     contactCity: String
   }
 
+  type PresignedUrlResponse {
+    uploadUrl: String!
+    fileKey: String!
+  }
+
   type Query {
     hello: String
     me: Client
@@ -243,6 +248,7 @@ const authSchema = gql`
     updateSubscription(input: UpdateSubscriptionInput!): Client!
     updatePaymentCard(input: UpdatePaymentCardInput!): Client!
     removePaymentCard: Client!
+    uploadFiles(storeId: ID!, fileNames: [String!]!, fileTypes: [String!]!): [PresignedUrlResponse!]!
   }
 `;
 

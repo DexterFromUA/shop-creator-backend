@@ -1,6 +1,7 @@
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const { generatePresignedUrl } = require("../../storage.service");
 
 const prisma = new PrismaClient();
 
@@ -211,7 +212,7 @@ const authResolvers = {
           },
         },
       });
-      console.log('store resolver', store)
+      console.log("store resolver", store);
 
       return store;
     },
@@ -636,6 +637,29 @@ const authResolvers = {
       console.log("Product stock updated successfully:", updatedProduct.id);
       return updatedProduct;
     },
+
+    uploadFiles: async (_, { storeId, fileNames, fileTypes }, { user }) => {
+      if (!user) {
+        throw new Error("Not authenticated");
+      }
+
+      try {
+        const urls = [];
+
+        for (let i = 0; i < fileNames.length; i++) {
+          const res = await generatePresignedUrl(
+            storeId,
+            fileNames[i],
+            fileTypes[i],
+          );
+          urls.push(res);
+        }
+
+        return urls;
+      } catch (error) {
+        throw new Error("Error while generating the links");
+      }
+    },
   },
   Store: {
     products: async (parent) => {
@@ -654,9 +678,6 @@ const authResolvers = {
       return await prisma.store.findUnique({
         where: { id: parent.storeId },
         include: {
-          owner: true,
-          managers: true,
-          couriers: true,
           app: true,
         },
       });
