@@ -1,6 +1,9 @@
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+// const {} = require("nanoid");
+const { nanoid } = require("nanoid");
+
 const { generatePresignedUrl } = require("../../storage.service");
 
 const prisma = new PrismaClient();
@@ -123,6 +126,7 @@ const authResolvers = {
         include: {
           store: true,
           productOptions: true,
+          shortLinks: true,
         },
       });
 
@@ -568,6 +572,71 @@ const authResolvers = {
       } catch (error) {
         throw new Error("Error while generating the links");
       }
+    },
+
+    createShortLink: async (
+      _,
+      { productId, description, expirationDate },
+      { user },
+    ) => {
+      if (!user) {
+        throw new Error("Not authenticated");
+      }
+
+      const existingProduct = await prisma.product.findUnique({
+        where: { id: productId },
+      });
+      if (!existingProduct) {
+        throw new Error("Product not found");
+      }
+
+      const permission = await checkPermission({
+        storeId: existingProduct.storeId,
+        clientId: user.id,
+        permission: "PRODUCTS",
+      });
+      if (!permission) {
+        throw new Error("Store not found");
+      }
+
+      const code = nanoid(7);
+      const link = await prisma.shortLink.create({
+        data: {
+          code: code,
+          productId,
+          description,
+          expirationDate,
+        },
+      });
+
+      return link;
+    },
+    revokeShortLink: async (_, { id, productId, storeId }, { user }) => {
+      if (!user) {
+        throw new Error("Not authenticated");
+      }
+
+      const existingProduct = await prisma.product.findUnique({
+        where: { id: productId },
+      });
+      if (!existingProduct) {
+        throw new Error("Product not found");
+      }
+
+      const permission = await checkPermission({
+        storeId: existingProduct.storeId,
+        clientId: user.id,
+        permission: "PRODUCTS",
+      });
+      if (!permission) {
+        throw new Error("Store not found");
+      }
+
+      const data = await prisma.shortLink.delete({
+        where: { id },
+      });
+
+      return data.id;
     },
   },
   Store: {

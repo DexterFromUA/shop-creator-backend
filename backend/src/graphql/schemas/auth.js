@@ -147,6 +147,7 @@ const authSchema = gql`
     isActive: Boolean!
     createdAt: String!
     updatedAt: String!
+    shortLinks: [ShortLink]!
   }
 
   type Client {
@@ -249,6 +250,18 @@ const authSchema = gql`
     fileKey: String!
   }
 
+  type ShortLink {
+    id: ID!
+    code: String!
+    description: String
+    clicks: Int!
+    expirationDate: String
+    productId: String!
+    product: Product!
+    createdAt: String!
+    updatedAt: String!
+  }
+
   type Query {
     hello: String
     me: Client
@@ -271,6 +284,8 @@ const authSchema = gql`
     updatePaymentCard(input: UpdatePaymentCardInput!): Client!
     removePaymentCard: Client!
     uploadFiles(storeId: ID!, fileNames: [String!]!, fileTypes: [String!]!): [PresignedUrlResponse!]!
+    createShortLink(productId: String!, description: String, expirationDate: String): ShortLink!
+    revokeShortLink(id: String!, productId: String!, storeId: String!): String!
   }
 `;
 
