@@ -9,4 +9,4 @@ COPY . .
 
 RUN yarn run db:generate
 
-CMD ["sh", "-c", "yarn db:migrate && yarn dev"]
+CMD ["sh", "-c", "yarn dev"]
