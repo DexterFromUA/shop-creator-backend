@@ -102,8 +102,7 @@ const authResolvers = {
       const products = await prisma.product.findMany({
         where: { storeId },
         include: {
-          sizeInventory: true,
-          store: true,
+          productOptions: true,
         },
         orderBy: {
           createdAt: "desc",
@@ -122,8 +121,8 @@ const authResolvers = {
       const product = await prisma.product.findUnique({
         where: { id },
         include: {
-          sizeInventory: true,
           store: true,
+          productOptions: true,
         },
       });
 
@@ -393,48 +392,33 @@ const authResolvers = {
       }
 
       const product = await prisma.$transaction(async (prismaTransaction) => {
-        const newProduct = await prismaTransaction.product.create({
+        return await prismaTransaction.product.create({
           data: {
             name: input.name,
             description: input.description,
-            price: input.price,
             category: input.category,
-            isPreOrder: input.isPreOrder,
-            isDiscount: input.isDiscount,
-            discountPercent: input.discountPercent,
             imgUrls: input.imgUrls,
             storeId: input.storeId,
-            amount: 0,
-            orderCount: 0,
+            orderCount: 0, // replace with aggregation
+            productOptions: {
+              create: input.productOptions.map((item) => ({
+                name: item.name,
+                description: item.description,
+                price: item.price,
+                isPreOrder: item.isPreOrder,
+                isDiscount: item.isDiscount,
+                isLimited: item.isLimited,
+                discountPercent: item.discountPercent,
+                quantity: item.quantity,
+              })),
+            },
           },
-        });
-
-        const sizeInventory = await prismaTransaction.productSize.createMany({
-          data: input.sizeInventory.map((size) => ({
-            size: size.size,
-            quantity: size.quantity,
-            productId: newProduct.id,
-          })),
-        });
-
-        const totalAmount = input.sizeInventory.reduce(
-          (sum, size) => sum + size.quantity,
-          0,
-        );
-
-        const updatedProduct = await prismaTransaction.product.update({
-          where: { id: newProduct.id },
-          data: { amount: totalAmount },
           include: {
-            sizeInventory: true,
-            store: true,
+            productOptions: true,
           },
         });
-
-        return updatedProduct;
       });
 
-      console.log("Product created successfully:", product.id);
       return product;
     },
     updateProduct: async (_, { id, input }, { user }) => {
@@ -446,10 +430,6 @@ const authResolvers = {
 
       const existingProduct = await prisma.product.findUnique({
         where: { id },
-        include: {
-          sizeInventory: true,
-          store: true,
-        },
       });
 
       if (!existingProduct) {
@@ -469,62 +449,60 @@ const authResolvers = {
         async (prismaTransaction) => {
           const updateData = {};
 
-          // Only update fields that are provided
           if (input.name !== undefined) updateData.name = input.name;
           if (input.description !== undefined)
             updateData.description = input.description;
-          if (input.price !== undefined) updateData.price = input.price;
           if (input.category !== undefined)
             updateData.category = input.category;
-          if (input.isPreOrder !== undefined)
-            updateData.isPreOrder = input.isPreOrder;
-          if (input.isDiscount !== undefined)
-            updateData.isDiscount = input.isDiscount;
-          if (input.discountPercent !== undefined)
-            updateData.discountPercent = input.discountPercent;
           if (input.imgUrls !== undefined) updateData.imgUrls = input.imgUrls;
-
-          // Update size inventory if provided
-          if (input.sizeInventory) {
-            // Delete existing size inventory
-            await prismaTransaction.productSize.deleteMany({
-              where: { productId: id },
-            });
-
-            // Create new size inventory entries
-            if (input.sizeInventory.length > 0) {
-              await prismaTransaction.productSize.createMany({
-                data: input.sizeInventory.map((size) => ({
-                  size: size.size,
-                  quantity: size.quantity,
-                  productId: id,
-                })),
-              });
-            }
-
-            // Calculate new total amount
-            const totalAmount = input.sizeInventory.reduce(
-              (sum, size) => sum + size.quantity,
-              0,
+          if (input.productOptions) {
+            const existingOptions = input.productOptions.filter(
+              (item) => item.id,
             );
-            updateData.amount = totalAmount;
+            const newOptions = input.productOptions.filter((item) => !item.id);
+
+            updateData.productOptions = {
+              deleteMany: {
+                productId: id,
+                id: { notIn: existingOptions.map((item) => item.id) },
+              },
+              upsert: input.productOptions.map((item) => ({
+                where: { id: item.id || "new-uuid-placeholder" },
+                update: {
+                  name: item.name,
+                  description: item.description,
+                  price: item.price,
+                  isPreOrder: item.isPreOrder,
+                  isDiscount: item.isDiscount,
+                  discountPercent: item.discountPercent,
+                  isLimited: item.isLimited,
+                  quantity: item.quantity,
+                },
+                create: {
+                  name: item.name,
+                  description: item.description,
+                  price: item.price,
+                  isPreOrder: item.isPreOrder,
+                  isDiscount: item.isDiscount,
+                  discountPercent: item.discountPercent,
+                  isLimited: item.isLimited,
+                  quantity: item.quantity,
+                },
+              })),
+            };
           }
 
-          // Update the product
-          const product = await prismaTransaction.product.update({
+          return await prismaTransaction.product.update({
             where: { id },
             data: updateData,
             include: {
-              sizeInventory: true,
               store: true,
+              productOptions: true,
             },
           });
-
-          return product;
         },
       );
 
-      console.log("Product updated successfully:", updatedProduct.id);
       return updatedProduct;
     },
     deleteProduct: async (_, { id }, { user }) => {
@@ -553,18 +531,12 @@ const authResolvers = {
 
       const deletedProduct = await prisma.$transaction(
         async (prismaTransaction) => {
-          // First delete all size inventory entries
-          await prismaTransaction.productSize.deleteMany({
+          await prismaTransaction.productOptions.deleteMany({
             where: { productId: id },
           });
 
-          // Then delete the product itself
           const product = await prismaTransaction.product.delete({
             where: { id },
-            include: {
-              sizeInventory: true,
-              store: true,
-            },
           });
 
           return product;
@@ -573,69 +545,6 @@ const authResolvers = {
 
       console.log("Product deleted successfully:", deletedProduct.id);
       return deletedProduct;
-    },
-    updateProductStock: async (_, { id, sizeInventory }, { user }) => {
-      if (!user) {
-        throw new Error("Not authenticated");
-      }
-
-      console.log("Updating product stock:", id, "by user:", user.id);
-
-      const existingProduct = await prisma.product.findUnique({
-        where: { id },
-      });
-
-      if (!existingProduct) {
-        throw new Error("Product not found");
-      }
-
-      const permission = await checkPermission({
-        storeId: existingProduct.storeId,
-        clientId: user.id,
-        permission: "PRODUCTS",
-      });
-      if (!permission) {
-        throw new Error("Store not found");
-      }
-
-      const updatedProduct = await prisma.$transaction(
-        async (prismaTransaction) => {
-          // Delete existing size inventory
-          await prismaTransaction.productSize.deleteMany({
-            where: { productId: id },
-          });
-
-          // Create new size inventory entries
-          await prismaTransaction.productSize.createMany({
-            data: sizeInventory.map((size) => ({
-              size: size.size,
-              quantity: size.quantity,
-              productId: id,
-            })),
-          });
-
-          // Calculate new total amount
-          const totalAmount = sizeInventory.reduce(
-            (sum, size) => sum + size.quantity,
-            0,
-          );
-
-          // Update product with new total amount
-          const product = await prismaTransaction.product.update({
-            where: { id },
-            data: { amount: totalAmount },
-            include: {
-              sizeInventory: true,
-              store: true,
-            },
-          });
-
-          return product;
-        },
-      );
-
-      console.log("Product stock updated successfully:", updatedProduct.id);
-      return updatedProduct;
     },
 
     uploadFiles: async (_, { storeId, fileNames, fileTypes }, { user }) => {
@@ -668,6 +577,7 @@ const authResolvers = {
         include: {
           sizeInventory: true,
           store: true,
+          productOptions: true,
         },
         orderBy: { createdAt: "desc" },
       });
@@ -681,6 +591,54 @@ const authResolvers = {
           app: true,
         },
       });
+    },
+    amount: async (parent) => {
+      const aggregations = await prisma.productOptions.aggregate({
+        _sum: {
+          quantity: true,
+        },
+        where: {
+          productId: parent.id,
+        },
+      });
+
+      return aggregations._sum.quantity || 0;
+    },
+    priceRange: async (parent) => {
+      const aggregations = await prisma.productOptions.aggregate({
+        _min: {
+          price: true,
+        },
+        _max: {
+          price: true,
+        },
+        where: {
+          productId: parent.id,
+        },
+      });
+
+      return {
+        min: aggregations._min.price || 0,
+        max: aggregations._max.price || 0,
+      };
+    },
+    discountRange: async (parent) => {
+      const aggregations = await prisma.productOptions.aggregate({
+        _min: {
+          discountPercent: true,
+        },
+        _max: {
+          discountPercent: true,
+        },
+        where: {
+          productId: parent.id,
+        },
+      });
+
+      return {
+        min: aggregations._min.discountPercent || 0,
+        max: aggregations._max.discountPercent || 0,
+      };
     },
   },
   ProductSize: {

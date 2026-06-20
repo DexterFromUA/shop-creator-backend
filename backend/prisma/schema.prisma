@@ -151,13 +151,8 @@ model Product {
   id              String        @id @default(uuid())
   name            String
   description     String?
-  price           Float
   category        String?
-  amount          Int           @default(0)
-  sizeInventory   ProductSize[]
-  isPreOrder      Boolean       @default(false)
-  isDiscount      Boolean       @default(false)
-  discountPercent Int           @default(0)
+  productOptions  ProductOptions[]
   imgUrls         String[]      @default([])
   storeId         String
   store           Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
@@ -170,17 +165,21 @@ model Product {
   @@index([storeId, name])
 }
 
-model ProductSize {
-  id        String   @id @default(uuid())
-  size      Size
-  quantity  Int      @default(0)
-  productId String
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
-  @@unique([productId, size])
-  @@index([productId])
+model ProductOptions {
+  id                String    @id @default(uuid())
+  name              String?
+  description       String?
+  productId         String
+  product           Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  price             Float
+  isPreOrder        Boolean   @default(false)
+  isDiscount        Boolean   @default(false)
+  discountPercent   Int       @default(0)
+  isLimited         Boolean   @default(false)
+  quantity          Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 }
 
 model Order {

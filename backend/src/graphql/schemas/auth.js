@@ -98,21 +98,52 @@ const authSchema = gql`
     updatedAt: String!
   }
 
+  type ProductOptions {
+    id: ID!
+    name: String!
+    description: String
+    productId: String!
+    product: Product!
+    price: Float
+    isPreOrder: Boolean!
+    isDiscount: Boolean!
+    discountPercent: Int!
+    isLimited: Boolean!
+    quantity: Int!
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  input ProductOptionsInput {
+    id: ID
+    name: String
+    description: String
+    price: Float!
+    isPreOrder: Boolean
+    isDiscount: Boolean
+    discountPercent: Int
+    isLimited: Boolean
+    quantity: Int
+  }
+
+  type Range {
+    min: Float!
+    max: Float!
+  }
+
   type Product {
     id: ID!
     name: String!
     description: String
-    price: Float!
     category: String
     amount: Int!
-    sizeInventory: [ProductSize!]!
-    isPreOrder: Boolean!
-    isDiscount: Boolean!
-    discountPercent: Int!
+    productOptions: [ProductOptions]!
     imgUrls: [String!]
     storeId: String!
     store: Store!
     orderCount: Int!
+    priceRange: Range!
+    discountRange: Range!
     isActive: Boolean!
     createdAt: String!
     updatedAt: String!
@@ -190,26 +221,18 @@ const authSchema = gql`
   input CreateProductInput {
     name: String!
     description: String
-    price: Float!
     category: String
-    isPreOrder: Boolean!
-    isDiscount: Boolean!
-    discountPercent: Int!
-    imgUrls: [String!]
-    sizeInventory: [ProductSizeInput!]!
+    imgUrls: [String]
     storeId: String!
+    productOptions: [ProductOptionsInput!]!
   }
 
   input UpdateProductInput {
     name: String
     description: String
-    price: Float
     category: String
-    isPreOrder: Boolean
-    isDiscount: Boolean
-    discountPercent: Int
     imgUrls: [String!]
-    sizeInventory: [ProductSizeInput!]
+    productOptions: [ProductOptionsInput!]!
   }
 
   input UpdateStoreInput {
@@ -232,7 +255,7 @@ const authSchema = gql`
     myStores: [StoreClients]!
     store(id: ID!): StoreClients!
     storeProducts(storeId: ID!): [Product!]!
-    product(id: ID!): Product
+    product(id: ID!): Product!
   }
 
   type Mutation {
@@ -244,7 +267,6 @@ const authSchema = gql`
     createProduct(input: CreateProductInput!): Product!
     deleteProduct(id: ID!): Product!
     updateProduct(id: ID!, input: UpdateProductInput!): Product!
-    updateProductStock(id: ID!, sizeInventory: [ProductSizeInput!]!): Product!
     updateSubscription(input: UpdateSubscriptionInput!): Client!
     updatePaymentCard(input: UpdatePaymentCardInput!): Client!
     removePaymentCard: Client!
